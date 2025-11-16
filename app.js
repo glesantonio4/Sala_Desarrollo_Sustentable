@@ -1,16 +1,18 @@
 /* =================== Datos =================== */
 const params = new URLSearchParams(location.search);
-const SALA = params.get('sala') || 'Exploración';
-// Las preguntas se cargan desde `preguntas.json` en lugar de estar embebidas.
+// 👇 Slug de la sala en la tabla `salas`
+const SALA = params.get('sala') || 'desarrollo';
+
+// Las preguntas se cargan desde `preguntas.json`
 const NUM_QUESTIONS = 6;
 const shuffle = a => a.map(x=>[Math.random(),x]).sort((p,q)=>p[0]-q[0]).map(p=>p[1]);
 
-// Placeholder: QUESTIONS se inicializará tras cargar el JSON.
 let QUESTIONS = [];
 
-/* ========== Supabase: init + helpers (no alteran tu UI/flujo) ========== */
+/* ========== Supabase: init + helpers ========== */
 const SUPABASE_URL = 'https://qwgaeorsymfispmtsbut.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3Z2Flb3JzeW1maXNwbXRzYnV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODcyODUsImV4cCI6MjA3Nzk2MzI4NX0.FThZIIpz3daC9u8QaKyRTpxUeW0v4QHs5sHX2s1U1eo';
+
 let supabase = null;
 
 async function initSupabase(){
@@ -20,40 +22,63 @@ async function initSupabase(){
   return supabase;
 }
 
-/** Obtiene sala_id por slug; si no existe, intenta cualquiera disponible */
+/** Obtiene sala_id por slug; si no existe, toma cualquiera para no romper el juego */
 async function getSalaIdBySlug(slug){
   await initSupabase();
-  // 1) por slug (tal como venga en la URL)
-  let { data, error } = await supabase.from('salas').select('id, slug').eq('slug', slug).limit(1);
+
+  // 1) Buscar por slug
+  let { data, error } = await supabase
+    .from('salas')
+    .select('id, slug')
+    .eq('slug', slug)
+    .limit(1);
+
   if (!error && data?.length) return data[0].id;
 
-  // 2) cualquiera (fallback)
-  ({ data, error } = await supabase.from('salas').select('id').limit(1));
+  // 2) Cualquier sala (fallback)
+  ({ data, error } = await supabase
+    .from('salas')
+    .select('id')
+    .limit(1));
+
   if (!error && data?.length) return data[0].id;
 
   return null;
 }
 
-/** Reutiliza/crea un participante_id genérico, para ligar el quiz */
+/** Reutiliza/crea un participante_id “dummy” para asociar el quiz */
 async function ensureParticipanteId(){
   await initSupabase();
 
-  // 1) alguno usado recientemente en quizzes
+  // 1) Alguno usado recientemente en quizzes
   let { data, error } = await supabase
     .from('quizzes')
     .select('participante_id')
     .not('participante_id','is', null)
     .order('started_at', { ascending:false })
     .limit(1);
+
   if (!error && data?.length) return data[0].participante_id;
 
-  // 2) de participantes
-  ({ data, error } = await supabase.from('participantes').select('id').limit(1));
+  // 2) Alguno de la tabla participantes
+  ({ data, error } = await supabase
+    .from('participantes')
+    .select('id')
+    .limit(1));
+
   if (!error && data?.length) return data[0].id;
 
-  // 3) crear vacío
-  const ins = await supabase.from('participantes').insert({}).select('id').single();
-  if (ins.error) { console.warn('No se pudo crear participante:', ins.error.message); return null; }
+  // 3) Crear uno vacío
+  const ins = await supabase
+    .from('participantes')
+    .insert({})
+    .select('id')
+    .single();
+
+  if (ins.error){
+    console.warn('No se pudo crear participante:', ins.error.message);
+    return null;
+  }
   return ins.data.id;
 }
 
@@ -71,8 +96,16 @@ async function startQuizInDB(){
       num_preguntas: NUM_QUESTIONS
     };
 
-    const { data, error } = await supabase.from('quizzes').insert(payload).select('id').single();
-    if (error) { console.warn('No se pudo crear quiz:', error.message); return null; }
+    const { data, error } = await supabase
+      .from('quizzes')
+      .insert(payload)
+      .select('id')
+      .single();
+
+    if (error){
+      console.warn('No se pudo crear quiz:', error.message);
+      return null;
+    }
 
     sessionStorage.setItem('much_current_quiz_id', data.id);
     return data.id;
@@ -82,7 +115,7 @@ async function startQuizInDB(){
   }
 }
 
-/** Actualiza el quiz con puntos y correctas al final */
+/** Actualiza quiz con puntaje y aciertos al terminar */
 async function finishQuizInDB({ puntaje, correctas }){
   try{
     await initSupabase();
@@ -106,7 +139,7 @@ async function finishQuizInDB({ puntaje, correctas }){
   }
 }
 
-// Función para cargar preguntas desde el archivo preguntas.json
+/* =================== Cargar preguntas =================== */
 async function loadPreguntas(){
   try{
     const resp = await fetch('preguntas.json', { cache: 'no-store' });
@@ -126,7 +159,6 @@ async function loadPreguntas(){
 class SoundFX{
   constructor(toggleEl){ this.toggleEl = toggleEl; this.ctx = null; }
   beep(freq=880, dur=0.15, type='sine', vol=0.08){
-    // ✅ Soporta ausencia del switch de sonido (portada o páginas sin el control)
     if (this.toggleEl && !this.toggleEl.checked) return;
     this.ctx = this.ctx || new (window.AudioContext||window.webkitAudioContext)();
     const o=this.ctx.createOscillator(), g=this.ctx.createGain();
@@ -147,7 +179,14 @@ class Confetti{
   resize(){ this.canvas.width = innerWidth; this.canvas.height = innerHeight; }
   launch(n=120){
     for(let i=0;i<n;i++){
-      this.pieces.push({ x: Math.random()*this.canvas.width, y:-10, r:4+Math.random()*4, vy:2+Math.random()*3, vx:-2+Math.random()*4, rot:Math.random()*Math.PI*2 });
+      this.pieces.push({
+        x: Math.random()*this.canvas.width,
+        y:-10,
+        r:4+Math.random()*4,
+        vy:2+Math.random()*3,
+        vx:-2+Math.random()*4,
+        rot:Math.random()*Math.PI*2
+      });
     }
   }
   loop(){
@@ -167,8 +206,8 @@ class Confetti{
 class PrizeManager{
   constructor(){
     this.PRIZES = [
-      { key:'museo',      title:'MUCH · Museo',      label:'Entrada al Museo MUCH',  lugar:'Museo Chiapas (MUCH)', emoji:'🏛️' },
-      { key:'planetario', title:'MUCH · Planetario', label:'Entrada al Planetario MUCH',lugar:'Planetario MUCH',      emoji:'🔭' },
+      { key:'museo',      title:'MUCH · Museo',      label:'Entrada al Museo MUCH',      lugar:'Museo Chiapas (MUCH)', emoji:'🏛️' },
+      { key:'planetario', title:'MUCH · Planetario', label:'Entrada al Planetario MUCH', lugar:'Planetario MUCH',      emoji:'🔭' },
     ];
   }
   random(){ return this.PRIZES[Math.floor(Math.random()*this.PRIZES.length)]; }
@@ -180,7 +219,7 @@ class UIManager{
     this.state = { idx:0, selected:null, points:0, correct:0, locked:false, answers:[] };
     this.currentPrize = null;
 
-    // ⚡ Anti-trampa
+    // Anti-trampa
     this.cheatingDetected = false;
 
     this.e.pillSala.textContent = `Sala: ${SALA}`;
@@ -249,7 +288,7 @@ class UIManager{
     const pct = Math.min(100, (s.idx/QUESTIONS.length*100));
     e.bar.style.width = pct + '%';
 
-    // Si hubo trampa, vamos directo a resultados/penalización
+    // Si hubo trampa, mostramos mensaje final
     if (this.cheatingDetected) {
       e.quizView.classList.add('d-none');
       e.finalView.classList.remove('d-none');
@@ -265,8 +304,9 @@ class UIManager{
       return;
     }
 
+    // Fin del quiz
     if(s.idx>=QUESTIONS.length){
-      // ✅ guardar resultados del quiz en Supabase
+      // Guardar resultados en BD
       finishQuizInDB({ puntaje: s.points, correctas: s.correct });
 
       const allCorrect = s.correct===QUESTIONS.length;
@@ -344,9 +384,8 @@ class UIManager{
   }
 }
 
-/* =================== Instanciación segura para portada/index =================== */
+/* =================== Instanciación segura =================== */
 
-// Referencias a elementos del QUIZ (si no existen, quedan en null)
 const elements = {
   pillSala: document.getElementById('pillSala'),
   bar: document.getElementById('bar'),
@@ -379,10 +418,6 @@ const elements = {
 const sound    = new SoundFX(elements.soundToggle || null);
 const confetti = new Confetti(document.getElementById('confetti'));
 
-/** Arranque flexible:
- * - Si hay portada (welcome + startBtn), inicia al click.
- * - Si NO hay portada (index directo), auto-inicia.
- */
 document.addEventListener('DOMContentLoaded', ()=>{
   const welcome  = document.getElementById('welcome');
   const quizShell= document.getElementById('quizShell');
@@ -392,7 +427,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const start = async ()=>{
     try{
       await loadPreguntas();
-      await startQuizInDB();   // 👈 registra inicio en Supabase
+      await startQuizInDB();          // 👈 registra inicio en Supabase
       if (welcome) welcome.classList.add('hidden');
       if (quizShell) quizShell.classList.remove('hidden');
       new UIManager({ elements, sound, confetti, prizeMgr });
@@ -404,7 +439,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if (startBtn && welcome) {
     startBtn.addEventListener('click', (e)=>{ e.preventDefault(); start(); });
   } else {
-    // No hay portada en esta página → inicia solo
     start();
   }
 });

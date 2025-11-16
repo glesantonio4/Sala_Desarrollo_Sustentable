@@ -8,6 +8,104 @@ const shuffle = a => a.map(x=>[Math.random(),x]).sort((p,q)=>p[0]-q[0]).map(p=>p
 // Placeholder: QUESTIONS se inicializará tras cargar el JSON.
 let QUESTIONS = [];
 
+/* ========== Supabase: init + helpers (no alteran tu UI/flujo) ========== */
+const SUPABASE_URL = 'https://qwgaeorsymfispmtsbut.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3Z2Flb3JzeW1maXNwbXRzYnV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODcyODUsImV4cCI6MjA3Nzk2MzI4NX0.FThZIIpz3daC9u8QaKyRTpxUeW0v4QHs5sHX2s1U1eo';
+let supabase = null;
+
+async function initSupabase(){
+  if (supabase) return supabase;
+  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return supabase;
+}
+
+/** Obtiene sala_id por slug; si no existe, intenta cualquiera disponible */
+async function getSalaIdBySlug(slug){
+  await initSupabase();
+  // 1) por slug (tal como venga en la URL)
+  let { data, error } = await supabase.from('salas').select('id, slug').eq('slug', slug).limit(1);
+  if (!error && data?.length) return data[0].id;
+
+  // 2) cualquiera (fallback)
+  ({ data, error } = await supabase.from('salas').select('id').limit(1));
+  if (!error && data?.length) return data[0].id;
+
+  return null;
+}
+
+/** Reutiliza/crea un participante_id genérico, para ligar el quiz */
+async function ensureParticipanteId(){
+  await initSupabase();
+
+  // 1) alguno usado recientemente en quizzes
+  let { data, error } = await supabase
+    .from('quizzes')
+    .select('participante_id')
+    .not('participante_id','is', null)
+    .order('started_at', { ascending:false })
+    .limit(1);
+  if (!error && data?.length) return data[0].participante_id;
+
+  // 2) de participantes
+  ({ data, error } = await supabase.from('participantes').select('id').limit(1));
+  if (!error && data?.length) return data[0].id;
+
+  // 3) crear vacío
+  const ins = await supabase.from('participantes').insert({}).select('id').single();
+  if (ins.error) { console.warn('No se pudo crear participante:', ins.error.message); return null; }
+  return ins.data.id;
+}
+
+/** Inserta un quiz al iniciar (guarda id en sessionStorage) */
+async function startQuizInDB(){
+  try{
+    await initSupabase();
+    const sala_id = await getSalaIdBySlug(SALA);
+    const participante_id = await ensureParticipanteId();
+
+    const payload = {
+      sala_id,
+      participante_id,
+      started_at: new Date().toISOString(),
+      num_preguntas: NUM_QUESTIONS
+    };
+
+    const { data, error } = await supabase.from('quizzes').insert(payload).select('id').single();
+    if (error) { console.warn('No se pudo crear quiz:', error.message); return null; }
+
+    sessionStorage.setItem('much_current_quiz_id', data.id);
+    return data.id;
+  }catch(e){
+    console.warn('startQuizInDB error:', e?.message || e);
+    return null;
+  }
+}
+
+/** Actualiza el quiz con puntos y correctas al final */
+async function finishQuizInDB({ puntaje, correctas }){
+  try{
+    await initSupabase();
+    const quiz_id = sessionStorage.getItem('much_current_quiz_id');
+    if (!quiz_id) return;
+
+    const patch = {
+      finished_at: new Date().toISOString(),
+      puntaje_total: puntaje,
+      num_correctas: correctas
+    };
+
+    const { error } = await supabase
+      .from('quizzes')
+      .update(patch)
+      .eq('id', quiz_id);
+
+    if (error) console.warn('finishQuizInDB error:', error.message);
+  }catch(e){
+    console.warn('finishQuizInDB error:', e?.message || e);
+  }
+}
+
 // Función para cargar preguntas desde el archivo preguntas.json
 async function loadPreguntas(){
   try{
@@ -168,6 +266,9 @@ class UIManager{
     }
 
     if(s.idx>=QUESTIONS.length){
+      // ✅ guardar resultados del quiz en Supabase
+      finishQuizInDB({ puntaje: s.points, correctas: s.correct });
+
       const allCorrect = s.correct===QUESTIONS.length;
       if(allCorrect){
         const prize = this.prizeMgr.random();
@@ -291,6 +392,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const start = async ()=>{
     try{
       await loadPreguntas();
+      await startQuizInDB();   // 👈 registra inicio en Supabase
       if (welcome) welcome.classList.add('hidden');
       if (quizShell) quizShell.classList.remove('hidden');
       new UIManager({ elements, sound, confetti, prizeMgr });

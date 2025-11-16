@@ -157,7 +157,8 @@
     // ---------- Submit ----------
     let submitting = false;
 
-    $('registroForm').addEventListener('submit', function(e){
+    // 🔄 la volvemos async para poder esperar Supabase
+    $('registroForm').addEventListener('submit', async function(e){
       e.preventDefault();
       if (submitting) return;
       submitting = true;
@@ -200,11 +201,28 @@
         try { localStorage.setItem('much_quiz_prize', JSON.stringify(prizeData)); } catch(_){}
       }
 
+      const nombreLimpio = nombre.trim().replace(/\s+/g,' ');
+      const correoLimpio = correo.trim().toLowerCase();
+      const telLimpio    = telefono.trim();
+
+      // Primero intentamos guardar en Supabase (si la función global existe)
+      try{
+        if (window.saveRegistroToSupabase){
+          await window.saveRegistroToSupabase({
+            nombre: nombreLimpio,
+            correo: correoLimpio,
+            telefono: telLimpio,
+            premio: prizeData.label || '',
+            folio:  prizeData.folio || ''
+          });
+        }
+      }catch(_){}
+
       // Build params
       const params = new URLSearchParams({
-        nombre:   nombre.trim().replace(/\s+/g,' '),
-        correo:   correo.trim().toLowerCase(),
-        telefono: telefono.trim(),
+        nombre:   nombreLimpio,
+        correo:   correoLimpio,
+        telefono: telLimpio,
         premio:   prizeData.label || '',
         folio:    prizeData.folio || '',
         lugar:    prizeData.lugar || ''
@@ -230,5 +248,117 @@
       });
     });
   </script>
+
+  <!-- ✅ Nuevo: Supabase para participantes + boletos -->
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const SUPABASE_URL = 'https://qwgaeorsymfispmtsbut.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3Z2Flb3JzeW1maXNwbXRzYnV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODcyODUsImV4cCI6MjA3Nzk2MzI4NX0.FThZIIpz3daC9u8QaKyRTpxUeW0v4QHs5sHX2s1U1eo';
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function upsertParticipante(nombre, correo, telefono){
+      try{
+        let { data, error } = await supabase
+          .from('participantes')
+          .select('id')
+          .eq('correo', correo)
+          .limit(1);
+
+        if (!error && data && data.length){
+          return data[0].id;
+        }
+
+        ({ data, error } = await supabase
+          .from('participantes')
+          .insert({ nombre, correo, telefono })
+          .select('id')
+          .single());
+
+        if (error){
+          console.warn('Error insertando participante:', error.message);
+          return null;
+        }
+        return data?.id || null;
+      }catch(e){
+        console.warn('upsertParticipante error:', e?.message || e);
+        return null;
+      }
+    }
+
+    function addDays(date, days){
+      return new Date(date.getTime() + days*24*60*60*1000);
+    }
+
+    async function getPremioId(premioLabel){
+      try{
+        let query = supabase.from('premios').select('id, nombre, tipo').limit(1);
+
+        const lower = (premioLabel || '').toLowerCase();
+        if (lower.includes('planetario')){
+          query = query.eq('tipo','planetario');
+        }else if (lower.includes('museo')){
+          query = query.eq('tipo','museo');
+        }else if (premioLabel){
+          query = query.ilike('nombre', premioLabel);
+        }
+
+        const { data, error } = await query;
+        if (error){
+          console.warn('Error buscando premio:', error.message);
+          return null;
+        }
+        if (data && data.length) return data[0].id;
+        return null;
+      }catch(e){
+        console.warn('getPremioId error:', e?.message || e);
+        return null;
+      }
+    }
+
+    async function crearBoleto({ participante_id, folio, premioLabel }){
+      if (!participante_id || !folio) return;
+      try{
+        // si ya existe el folio, no duplicamos
+        let { data, error } = await supabase
+          .from('boletos')
+          .select('id')
+          .eq('folio', folio)
+          .limit(1);
+
+        if (!error && data && data.length){
+          return;
+        }
+
+        const hoy = new Date();
+        const desde = hoy.toISOString().slice(0,10);
+        const hasta = addDays(hoy, 7).toISOString().slice(0,10);
+
+        const premio_id = await getPremioId(premioLabel);
+
+        const payload = {
+          participante_id,
+          folio,
+          valido_desde: desde,
+          valido_hasta: hasta
+        };
+
+        if (premio_id) payload.premio_id = premio_id;
+
+        ({ error } = await supabase.from('boletos').insert(payload));
+        if (error) console.warn('Error creando boleto:', error.message);
+      }catch(e){
+        console.warn('crearBoleto error:', e?.message || e);
+      }
+    }
+
+    // Exponer una función global que el script de arriba pueda usar
+    window.saveRegistroToSupabase = async function({ nombre, correo, telefono, premio, folio }){
+      const participante_id = await upsertParticipante(nombre, correo, telefono);
+      await crearBoleto({ participante_id, folio, premioLabel: premio });
+    };
+  </script>
 </body>
 </html>
+

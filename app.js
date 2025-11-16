@@ -1,7 +1,7 @@
 /* =================== Datos =================== */
 const params = new URLSearchParams(location.search);
 // 👇 Slug de la sala en la tabla `salas`
-const SALA = params.get('sala') || 'desarrollo';
+const SALA = params.get('sala') || 'desarrollo_sustentable';
 
 // Las preguntas se cargan desde `preguntas.json`
 const NUM_QUESTIONS = 6;
@@ -442,3 +442,4 @@ document.addEventListener('DOMContentLoaded', ()=>{
     start();
   }
 });
+

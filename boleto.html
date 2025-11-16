@@ -201,5 +201,147 @@
     el('tTel').textContent    = tel;
   })();
   </script>
+
+  <!-- ✅ Nuevo: Supabase para asegurar que el boleto esté registrado -->
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const SUPABASE_URL = 'https://qwgaeorsymfispmtsbut.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3Z2Flb3JzeW1maXNwbXRzYnV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODcyODUsImV4cCI6MjA3Nzk2MzI4NX0.FThZIIpz3daC9u8QaKyRTpxUeW0v4QHs5sHX2s1U1eo';
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const qs = new URLSearchParams(location.search);
+
+    let prizeData = null;
+    try{
+      const raw = localStorage.getItem('much_quiz_prize');
+      if(raw) prizeData = JSON.parse(raw);
+    }catch(_){}
+
+    const nombreRaw  = qs.get('nombre')   || '';
+    const correoRaw  = qs.get('correo')   || '';
+    const telRaw     = qs.get('telefono') || '';
+    const premioRaw  = qs.get('premio')   || '';
+    const folioRaw   = qs.get('folio')    || '';
+
+    const nombre = nombreRaw.trim().replace(/\s+/g,' ');
+    const correo = correoRaw.trim().toLowerCase();
+    const telefono = telRaw.trim();
+    const premioLabel = (prizeData?.label) || premioRaw || 'Entrada general';
+    const folio  = (prizeData?.folio) || folioRaw  || null;
+
+    function addDays(date, days){
+      return new Date(date.getTime() + days*24*60*60*1000);
+    }
+
+    async function upsertParticipante(nombre, correo, telefono){
+      if (!correo) return null;
+      try{
+        let { data, error } = await supabase
+          .from('participantes')
+          .select('id')
+          .eq('correo', correo)
+          .limit(1);
+
+        if (!error && data && data.length){
+          return data[0].id;
+        }
+
+        ({ data, error } = await supabase
+          .from('participantes')
+          .insert({ nombre, correo, telefono })
+          .select('id')
+          .single());
+
+        if (error){
+          console.warn('[boleto] Error insertando participante:', error.message);
+          return null;
+        }
+        return data?.id || null;
+      }catch(e){
+        console.warn('[boleto] upsertParticipante error:', e?.message || e);
+        return null;
+      }
+    }
+
+    async function getPremioId(premioLabel){
+      try{
+        let query = supabase.from('premios').select('id, nombre, tipo').limit(1);
+
+        const lower = (premioLabel || '').toLowerCase();
+        if (lower.includes('planetario')){
+          query = query.eq('tipo','planetario');
+        }else if (lower.includes('museo')){
+          query = query.eq('tipo','museo');
+        }else if (premioLabel){
+          query = query.ilike('nombre', premioLabel);
+        }
+
+        const { data, error } = await query;
+        if (error){
+          console.warn('[boleto] Error buscando premio:', error.message);
+          return null;
+        }
+        if (data && data.length) return data[0].id;
+        return null;
+      }catch(e){
+        console.warn('[boleto] getPremioId error:', e?.message || e);
+        return null;
+      }
+    }
+
+    async function ensureBoleto({ participante_id, folio, premioLabel }){
+      if (!participante_id || !folio) return;
+      try{
+        // ¿Ya existe este folio?
+        let { data, error } = await supabase
+          .from('boletos')
+          .select('id')
+          .eq('folio', folio)
+          .limit(1);
+
+        if (!error && data && data.length){
+          return; // ya está
+        }
+
+        const hoy = new Date();
+        const desde = hoy.toISOString().slice(0,10);
+        const hasta = addDays(hoy, 7).toISOString().slice(0,10);
+
+        const premio_id = await getPremioId(premioLabel);
+
+        const payload = {
+          participante_id,
+          folio,
+          valido_desde: desde,
+          valido_hasta: hasta
+        };
+
+        if (premio_id) payload.premio_id = premio_id;
+
+        ({ error } = await supabase.from('boletos').insert(payload));
+        if (error){
+          console.warn('[boleto] Error creando boleto:', error.message);
+        }
+      }catch(e){
+        console.warn('[boleto] ensureBoleto error:', e?.message || e);
+      }
+    }
+
+    (async () => {
+      try{
+        if (!folio) {
+          console.warn('[boleto] No hay folio, no se registra en BD.');
+          return;
+        }
+        const participante_id = await upsertParticipante(nombre, correo, telefono);
+        await ensureBoleto({ participante_id, folio, premioLabel });
+      }catch(e){
+        console.warn('[boleto] Error general conectando con BD:', e?.message || e);
+      }
+    })();
+  </script>
 </body>
 </html>
+

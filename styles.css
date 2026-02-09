@@ -1,111 +1,193 @@
-/* ====== Paleta DEsarrollo sustentable ====== */
-:root{
-  --turquesa-50:#ecfeff; --turquesa-100:#cffafe; --turquesa-200:#a5f3fc;
-  --turquesa-300:#67e8f9; --turquesa-400:#22d3ee; --turquesa-500:#06b6d4;
-  --turquesa-600:#0891b2; --turquesa-700:#0e7490;
-
-  --fucsia-50:#fdf4ff; --fucsia-100:#fae8ff; --fucsia-200:#f5d0fe;
-  --fucsia-300:#f0abfc; --fucsia-400:#e879f9; --fucsia-500:#d946ef;
-  --fucsia-600:#c026d3; --fucsia-700:#a21caf;
-
-  --gris-100:#f3f4f6; --gris-200:#e5e7eb; --gris-300:#d1d5db;
-  --gris-400:#9ca3af; --gris-500:#6b7280; --gris-600:#4b5563; --gris-700:#374151;
-
-  --turquesa:var(--turquesa-500);
-  --fucsia:var(--fucsia-500);
-
-  --card-bg:#fff;
-  --card-br:24px;
-  --shadow-soft:0 10px 30px rgba(2,6,23,.12);
-  --shadow-hover:0 16px 36px rgba(2,6,23,.18);
+/* ====== Paleta de Colores y Variables (Inspirado en Energía/Imagen) ====== */
+:root {
+  --primary: #3b82f6;    /* Azul vibrante */
+  --primary-dark: #2563eb;
+  --secondary: #6366f1;  /* Púrpura índigo */
+  --bg-gradient: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  --white: #ffffff;
+  --gray-light: #f8fafc;
+  --gray-200: #e2e8f0;
+  --gray-600: #475569;
+  --gray-800: #1e293b;
+  --success: #22c55e;
+  
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+  --shadow-md: 0 4px 12px rgba(59, 130, 246, 0.15);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.05);
+  
+  --radius-xl: 1.5rem;   /* 24px */
+  --radius-lg: 1rem;     /* 16px */
 }
 
-/* ====== Fondo animado (también para el quiz) ====== */
-body{
-  margin:0;
-  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
-  min-height:100vh;
-  background: linear-gradient(135deg, #0ea5b9, #ec4899, #38bdf8, #f472b6);
-  background-size: 400% 400%;
-  animation: gradientMove 25s ease infinite;
-  overflow-x:hidden;
-}
-@keyframes gradientMove{
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+/* ====== Fondo y Estructura ====== */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg-gradient);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-800);
 }
 
-.hidden{ display:none !important; }
+#quizShell {
+  width: 100%;
+  max-width: 500px;
+  padding: 1rem;
+}
 
-/* ====== Logo que también usa el quiz ====== */
-.logo__img{
-  height:90px; border-radius:16px; margin-bottom:18px; padding:6px;
-  background: rgba(255,255,255,.95);
-  border:1px solid color-mix(in srgb, var(--turquesa) 22%, white);
-  box-shadow: 0 10px 26px rgba(6,182,212,.25);
+.quiz-card {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  padding: 2rem 1.5rem;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+/* ====== Header ====== */
+.logo-header {
+  height: 42px;
+  width: auto;
   object-fit: contain;
 }
-.logo__img.small{ height:56px; margin-bottom:0; }
 
-/* ====== Contenedor del QUIZ ====== */
-#quizShell{
-  min-height:100vh;
-  display:flex; align-items:center; justify-content:center;
-  padding: 24px 16px;
-  box-sizing:border-box;
+.app-title {
+  font-weight: 800;
+  font-size: 1.35rem;
+  color: #0f172a;
 }
 
-/* Tarjeta del quiz */
-.quiz-card{
-  width:min(760px, 96%);
-  background:var(--card-bg);
-  border-radius:var(--card-br);
-  box-shadow:var(--shadow-soft);
-  padding:16px 16px 18px;
-  border:1px solid color-mix(in srgb, var(--turquesa) 8%, #fff);
-  position:relative;
-}
-.quiz-card::before{
-  content:""; position:absolute; inset:auto 0 0 0; height:6px;
-  background:linear-gradient(90deg, var(--turquesa), var(--fucsia));
-  border-bottom-left-radius: var(--card-br);
-  border-bottom-right-radius: var(--card-br);
+.app-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
 }
 
-/* Chips, textos y elementos del quiz */
-.pill{
-  background: color-mix(in srgb, var(--turquesa) 12%, white);
-  color: var(--turquesa-700); font-weight: 800; border-radius: 999px;
-  padding: .45rem .9rem; border: 1px solid color-mix(in srgb, var(--turquesa) 18%, white);
+/* ====== Controls ====== */
+.sala-pill {
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 0.5rem 1.25rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
 }
-.tiny{ font-size:.92rem; color: var(--gris-600); }
 
-.progress{ height:6px; background:#eef2ff; border-radius:999px; }
-.progress__bar{ background:linear-gradient(90deg,var(--turquesa) 0%,var(--fucsia) 100%); box-shadow:0 0 0 2px #fff inset; }
-
-.question-card{
-  background:#fff; border:1px solid var(--gris-200); border-radius:14px; padding:14px;
-  box-shadow:0 8px 24px rgba(6,182,212,.08);
+.timer-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ef4444;
 }
-#qText{ font-size:1.05rem; font-weight:700; margin:0 0 4px; }
-#qDesc{ font-size:.9rem; color:var(--gris-600); }
 
-.option-btn{
-  border:2px solid transparent; text-align:left; padding:10px 12px; border-radius:12px; background:#fff;
-  transition: transform .08s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
-  box-shadow:0 4px 12px rgba(2,6,23,.05); width:100%; font-size:.95rem; min-height:44px;
+/* ====== Quiz View ====== */
+.badge-question {
+  background: #f1f5f9;
+  color: #3b82f6;
+  font-weight: 850;
+  font-size: 0.8rem;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  letter-spacing: 0.025em;
 }
-.option-btn:hover{
-  transform:translateY(-1px); box-shadow:var(--shadow-hover);
-  border-color:color-mix(in srgb, var(--fucsia) 55%, var(--turquesa) 45%);
-  background:linear-gradient(0deg,rgba(6,182,212,.05),rgba(217,70,239,.05));
-}
-.option-btn:focus-visible{ outline:none; box-shadow:0 0 0 4px color-mix(in srgb, var(--turquesa) 25%, white); border-color:var(--turquesa); }
-.option-btn--correct{ border-color:var(--turquesa)!important; background:color-mix(in srgb,var(--turquesa) 12%,white)!important; }
-.option-btn--incorrect{ border-color:var(--fucsia)!important; background:color-mix(in srgb,var(--fucsia) 10%,white)!important; }
-.option-btn:disabled{ opacity:.95; cursor:not-allowed; }
-.emoji{ font-size:14px; width:20px; display:inline-flex; justify-content:center; align-items:center; margin-right:6px; }
 
-/* Confeti canvas */
-.confetti-canvas{ position: fixed; inset: 0; pointer-events: none; z-index: 9999; }
+.question-text {
+  font-weight: 800;
+  font-size: 1.5rem;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+/* ====== Opciones (Estilo de la imagen) ====== */
+.options-list {
+  width: 100%;
+}
+
+.option-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 1.25rem 1.5rem;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+  font-weight: 500;
+  font-size: 1.05rem;
+  color: #475569;
+}
+
+.option-btn .emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #eff6ff;
+  color: #3b82f6;
+  border-radius: 6px;
+  margin-right: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.option-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+  background: #f8fbff;
+}
+
+.option-btn--correct {
+  background: #f0fdf4 !important;
+  border-color: var(--success) !important;
+  color: #166534 !important;
+}
+
+.option-btn--incorrect {
+  background: #fef2f2 !important;
+  border-color: #ef4444 !important;
+  color: #991b1b !important;
+}
+
+/* ====== Botón de Acción ====== */
+.btn-action {
+  background: #3b82f6;
+  color: var(--white);
+  border: none;
+  font-size: 1.25rem;
+  letter-spacing: 0.01em;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4);
+}
+
+.btn-action:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 10px -1px rgba(59, 130, 246, 0.5);
+}
+
+/* ====== Footer ====== */
+.points-pill {
+  display: inline-block;
+  font-weight: 800;
+  color: #1e293b;
+  font-size: 1rem;
+}
+
+/* Confeti */
+.confetti-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Vista Final */
+.result-score {
+  padding: 1.5rem;
+  background: #f8fbff;
+  border-radius: var(--radius-lg);
+  border: 2px dashed #dbeafe;
+}

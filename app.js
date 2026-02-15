@@ -117,8 +117,50 @@ async function loadPreguntas() {
 // ------------------------------------------------------------
 // 2. GESTIÓN DE PARTIDAS (DB TRACKING)
 // ------------------------------------------------------------
-// Se registra el intento en 'quizzes' SIEMPRE.
-// 'Ganadores' solo se toca si el usuario se registra al final.
+
+/**
+ * 🐆 ASEGURAR QUE EL PARTICIPANTE EXISTA
+ * Si no hay un usuario en sesión, crea uno temporal "Jugador Anónimo".
+ */
+async function ensureParticipanteId() {
+  await initSupabase();
+
+  // 1. Verificamos si ya tenemos el ID guardado en sesión
+  const existingId = sessionStorage.getItem("usuario_id");
+  if (existingId) return existingId;
+
+  const randomSuffix = Math.floor(Math.random() * 999999);
+  try {
+    console.log("Creando jugador temporal en Ganadores...");
+    const { data, error } = await supabase
+      .from('Ganadores')
+      .insert([
+        {
+          nombre: 'Visitante Sustentable',
+          correo: `visitante.${randomSuffix}@much.mx`,
+          telefono: '0000000000',
+          folio: 'V-' + randomSuffix,
+          valido_desde: getMexicoTime()
+        }
+      ])
+      .select('id')
+      .single();
+
+    if (error) {
+      console.warn("Fallback de participante...", error.message);
+      const { data: fallback } = await supabase.from('Ganadores').select('id').limit(1);
+      return fallback?.[0]?.id || null;
+    }
+
+    console.log("Jugador temporal creado con ID:", data.id);
+    sessionStorage.setItem("usuario_id", data.id);
+    return data.id;
+
+  } catch (e) {
+    console.error("Error en ensureParticipanteId:", e);
+    return null;
+  }
+}
 
 async function startQuizInDB() {
   if (quizIniciando) return sessionStorage.getItem('much_current_quiz_id');
@@ -133,14 +175,21 @@ async function startQuizInDB() {
     // 1. Recuperar Quiz Activo (reload)
     const juegoActivo = sessionStorage.getItem('much_current_quiz_id');
     if (juegoActivo) {
-      // Validar si es reciente? (Opcional)
       return juegoActivo;
     }
 
-    // 2. Insertar nuevo intento (participante_id = NULL)
+    // 2. Obtener un ID de participante válido
+    const participante_id = await ensureParticipanteId();
+    if (!participante_id) {
+      console.error("No se pudo obtener ID de participante.");
+      quizIniciando = false;
+      return null;
+    }
+
+    // 3. Insertar nuevo intento vinculado al participante real o temporal
     const payload = {
       sala_id: SALA_ENTRADA_ID,
-      participante_id: null, // Se vinculará en registro.html si gana
+      participante_id: participante_id, // <--- AQUÍ EVITAMOS QUE SALGA VACÍO
       started_at: getMexicoTime(),
       num_preguntas: NUM_QUESTIONS,
       puntaje_total: 0,
@@ -158,13 +207,13 @@ async function startQuizInDB() {
     if (error) {
       console.error("❌ Error Supabase (Start):", error.message);
       quizIniciando = false;
-      // Fallback: Modo Local
       startQuizLocal();
       return null;
     }
 
     console.log("✅ Intento iniciado. ID:", data.id);
     sessionStorage.setItem('much_current_quiz_id', data.id);
+    localStorage.setItem('much_quiz_db_id', String(data.id));
     return data.id;
 
   } catch (e) {

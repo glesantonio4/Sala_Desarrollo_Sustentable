@@ -1,6 +1,15 @@
 /* =================== Datos de Configuración =================== */
 const params = new URLSearchParams(location.search);
-const SALA = params.get('sala') || 'biodiversidad';
+const SALA = params.get('sala') || 'desarrollo-sustentable';
+
+// 🛡️ BLINDAJE NIVEL DIOS: Guardar en memoria PERMANENTE
+const LUGAR_EN_URL = params.get('lugar');
+if (LUGAR_EN_URL && LUGAR_EN_URL.trim() !== "") {
+  localStorage.setItem('much_lugar_seguro', LUGAR_EN_URL);
+}
+// Lo saca de la memoria (si no hay nada, pone Sin Especificar)
+const LUGAR_QR = localStorage.getItem('much_lugar_seguro') || 'Sin Especificar';
+
 const NUM_QUESTIONS = 6;
 // Función para mezclar arrays
 const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(p => p[1]);
@@ -17,7 +26,7 @@ let quizIniciando = false;
 const SUPABASE_URL = 'https://qwgaeorsymfispmtsbut.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3Z2Flb3JzeW1maXNwbXRzYnV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzODcyODUsImV4cCI6MjA3Nzk2MzI4NX0.FThZIIpz3daC9u8QaKyRTpxUeW0v4QHs5sHX2s1U1eo';
 
-// 🔒 ID EXACTO DE LA SALA "DESARROLLO SUSTENTABLE"
+// 🔒 ID EXACTO DE LA SALA "desarrollo-sustentable"
 const SALA_ENTRADA_ID = '17fd001d-f6c5-4f98-ab25-d81624227bc2';
 
 let supabase = null;
@@ -123,26 +132,25 @@ async function startQuizInDB() {
   try {
     await initSupabase();
 
-    // 🌟 LA CLAVE ESTÁ AQUÍ: Borramos el ID del intento anterior 
-    // para obligar a la base de datos a crear siempre una FILA NUEVA.
     sessionStorage.removeItem('much_current_quiz_id');
     sessionStorage.removeItem('much_quiz_final_data');
 
-    // 🌟 SE ESTABLECE EL ID MANUALMENTE COMO SE PIDIÓ
+    // 🌟 SE ESTABLECE EL ID MANUALMENTE
     const ID_JUGADOR = 365;
 
-    // Insertar nuevo intento SIEMPRE
+    // Insertar nuevo intento
     const payload = {
       sala_id: SALA_ENTRADA_ID,
-      participante_id: ID_JUGADOR, // ✅ Ya no será NULL
+      participante_id: ID_JUGADOR,
       started_at: getMexicoTime(),
       num_preguntas: NUM_QUESTIONS,
       puntaje_total: 0,
       num_correctas: 0,
-      estatus: 'activo'
+      estatus: 'activo',
+      ubicacion: LUGAR_QR // 🌟 SE MANDA LA MEMORIA PERMANENTE
     };
 
-    console.log("Guardando nuevo intento en BD...");
+    console.log("Guardando intento en BD...");
     const { data, error } = await supabase
       .from('quizzes')
       .insert(payload)
@@ -151,15 +159,13 @@ async function startQuizInDB() {
 
     if (error) {
       console.error("❌ Error Supabase (Start):", error.message);
-      alert("Error al guardar en BD: " + error.message);
       quizIniciando = false;
       startQuizLocal();
       return null;
     }
 
-    console.log("✅ Nuevo Intento guardado correctamente. ID:", data.id);
+    console.log("✅ Intento iniciado. ID:", data.id);
 
-    // Guardamos el nuevo ID en memoria
     sessionStorage.setItem('much_current_quiz_id', data.id);
     localStorage.setItem('much_quiz_db_id', String(data.id));
     localStorage.setItem('much_quiz_last_quiz_id', String(data.id));
@@ -205,35 +211,28 @@ async function checkLimiteBoletos() {
   try {
     await initSupabase();
 
-    // Obtener el inicio y fin del día actual (hora de México)
     const hoy = new Date();
     const offsetMexico = hoy.getTimezoneOffset() * 60000;
     const localTime = new Date(hoy.getTime() - offsetMexico);
-
-    // Formatear a YYYY-MM-DD
     const fechaHoyStr = localTime.toISOString().split('T')[0];
 
-    // Construir rangos de búsqueda (desde las 00:00:00 hasta las 23:59:59)
     const inicioDia = `${fechaHoyStr}T00:00:00.000Z`;
     const finDia = `${fechaHoyStr}T23:59:59.999Z`;
 
-    // Buscar cuántos juegos con puntaje perfecto (todos los aciertos) hay hoy para esta sala
     const { count, error } = await supabase
       .from('quizzes')
       .select('*', { count: 'exact', head: true })
       .eq('sala_id', SALA_ENTRADA_ID)
-      .gte('finished_at', inicioDia) // Mayor o igual que el inicio del día
-      .lte('finished_at', finDia)    // Menor o igual que el fin del día
-      .eq('num_correctas', NUM_QUESTIONS); // Solo cuentan los que ganaron el boleto
+      .gte('finished_at', inicioDia)
+      .lte('finished_at', finDia)
+      .eq('num_correctas', NUM_QUESTIONS);
 
     if (error) {
       console.error("Error al checar límite de boletos:", error);
-      return false; // Si hay error, permitimos que pase para no bloquear injustamente
+      return false;
     }
 
     console.log(`Boletos entregados hoy en esta sala: ${count}`);
-
-    // Si ya hay 3 o más, se alcanzó el límite
     return count >= 3;
 
   } catch (e) {
@@ -241,7 +240,6 @@ async function checkLimiteBoletos() {
     return false;
   }
 }
-
 
 // Fallback Functions
 function startQuizLocal() {
@@ -256,7 +254,6 @@ function saveQuizResultLocal(data) {
 
   localStorage.setItem('much_quiz_final_data', JSON.stringify(quizData));
 
-  // Reforzamos el ID en localStorage
   const dbId = sessionStorage.getItem('much_current_quiz_id');
   if (dbId) {
     localStorage.setItem('much_quiz_db_id', dbId);
@@ -380,7 +377,9 @@ class UIManager {
       emoji: this.currentPrize.emoji
     };
     localStorage.setItem('much_quiz_prize', JSON.stringify(prizeData));
-    window.location.href = 'registro.html';
+
+    // Pasamos el parámetro a registro
+    window.location.href = 'registro.html' + window.location.search;
   }
 
   async render() {
@@ -402,7 +401,6 @@ class UIManager {
     }
 
     if (s.idx >= QUESTIONS.length) {
-      // Mostrar estado de "cargando" mientras checamos la BD
       e.quizView.classList.add('d-none');
       e.finalView.classList.remove('d-none');
       e.finalTitle.textContent = 'Verificando resultados...';
@@ -430,16 +428,13 @@ class UIManager {
       e.finalTotal.textContent = QUESTIONS.length.toString();
 
       if (allCorrect) {
-        // 🌟 ANTES DE DAR EL PREMIO, REVISAMOS EL LÍMITE
         const limiteAlcanzado = await checkLimiteBoletos();
 
         if (limiteAlcanzado) {
-          // Ya se entregaron 3 boletos hoy
           e.finalTitle.textContent = '¡Felicidades, eres un experto! 🧠';
           e.finalMsg.innerHTML = '<span style="color: #e6007a; font-weight: bold;">Lo sentimos, los boletos para esta sala se han agotado por hoy.</span><br>¡Vuelve a intentarlo mañana!';
-          e.retryRow.classList.remove('d-none'); // Solo mostrar botón de volver a intentar
+          e.retryRow.classList.remove('d-none');
         } else {
-          // Aún hay boletos disponibles
           const prize = this.prizeMgr.random();
           this.currentPrize = prize;
 
@@ -447,7 +442,6 @@ class UIManager {
           e.finalMsg.textContent = '¡Has ganado un boleto!';
           e.giftRow.classList.remove('d-none');
 
-          // Pequeño margen y redirigir
           setTimeout(() => this.redirectToRegistration(), 500);
         }
         return;

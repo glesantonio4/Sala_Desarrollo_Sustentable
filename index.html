@@ -22,8 +22,10 @@
       var lugar = params.get('lugar');
 
       // 🛡️ ATRAPAMOS EL LUGAR EN EL MILISEGUNDO 1 ANTES DE QUE SE PIERDA
-      if (lugar) {
-        localStorage.setItem('much_lugar_seguro', lugar);
+      if (lugar && lugar.trim() !== '') {
+        localStorage.setItem('much_lugar_seguro', lugar.trim());
+      } else {
+        localStorage.removeItem('much_lugar_seguro');
       }
 
       // Permite entrar si vienes desde la portada; si no, manda a portada.html

@@ -124,6 +124,16 @@
     <a class="btn" href="index.html?from=portada">🚀 Jugar ahora</a>
     <p class="tip">Tip: Lee cuidadosamente las preguntas 🦖</p>
   </main>
+  <script>
+    (function () {
+      var playBtn = document.querySelector('a.btn');
+      if (!playBtn) return;
+
+      var params = new URLSearchParams(location.search);
+      params.set('from', 'portada');
+      playBtn.href = 'index.html?' + params.toString();
+    })();
+  </script>
 </body>
 </html>
 

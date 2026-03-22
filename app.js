@@ -3,12 +3,13 @@ const params = new URLSearchParams(location.search);
 const SALA = params.get('sala') || 'desarrollo-sustentable';
 
 // 🛡️ BLINDAJE NIVEL DIOS: Guardar en memoria PERMANENTE
-const LUGAR_EN_URL = params.get('lugar');
-if (LUGAR_EN_URL && LUGAR_EN_URL.trim() !== "") {
+const LUGAR_EN_URL = (params.get('lugar') || '').trim();
+if (LUGAR_EN_URL) {
   localStorage.setItem('much_lugar_seguro', LUGAR_EN_URL);
+} else {
+  localStorage.removeItem('much_lugar_seguro');
 }
-// Lo saca de la memoria (si no hay nada, pone Sin Especificar)
-const LUGAR_QR = localStorage.getItem('much_lugar_seguro') || 'Sin Especificar';
+const LUGAR_QR = LUGAR_EN_URL || 'Sin Especificar';
 
 const NUM_QUESTIONS = 6;
 // Función para mezclar arrays
@@ -31,6 +32,53 @@ const SALA_ENTRADA_ID = '17fd001d-f6c5-4f98-ab25-d81624227bc2';
 
 let supabase = null;
 
+function getMexicoDateParts(date = new Date()) {
+  const formatted = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZoneName: 'shortOffset'
+  }).formatToParts(date);
+
+  return Object.fromEntries(
+    formatted
+      .filter(part => part.type !== 'literal')
+      .map(part => [part.type, part.value])
+  );
+}
+
+function normalizeOffset(offsetValue) {
+  const rawOffset = String(offsetValue || 'GMT-06:00').replace('GMT', '');
+  const match = rawOffset.match(/^([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) return '-06:00';
+
+  const [, sign, hours, minutes = '00'] = match;
+  return `${sign}${hours.padStart(2, '0')}:${minutes}`;
+}
+
+function getMexicoDateKey(date = new Date()) {
+  const parts = getMexicoDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function buildPrizeFolio(prizeLabel = '') {
+  const text = String(prizeLabel || '').toLowerCase();
+  let prefix = 'MUCH';
+
+  if (text.includes('planetario')) {
+    prefix = 'PLAN';
+  } else if (text.includes('visita general') || text.includes('museo + planetario')) {
+    prefix = 'VGMP';
+  }
+
+  return `${prefix}-` + Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
 // Inicializa la librería
 async function initSupabase() {
   if (supabase) return supabase;
@@ -41,10 +89,9 @@ async function initSupabase() {
 
 // ⏰ FUNCIÓN CRÍTICA: Obtener hora exacta de México
 function getMexicoTime() {
-  const ahora = new Date();
-  const offsetMexico = ahora.getTimezoneOffset() * 60000;
-  const localTime = new Date(ahora.getTime() - offsetMexico);
-  return localTime.toISOString();
+  const parts = getMexicoDateParts();
+  const hour = parts.hour === '24' ? '00' : parts.hour;
+  return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}:${parts.second}${normalizeOffset(parts.timeZoneName)}`;
 }
 
 // ------------------------------------------------------------
@@ -211,13 +258,12 @@ async function checkLimiteBoletos() {
   try {
     await initSupabase();
 
-    const hoy = new Date();
-    const offsetMexico = hoy.getTimezoneOffset() * 60000;
-    const localTime = new Date(hoy.getTime() - offsetMexico);
-    const fechaHoyStr = localTime.toISOString().split('T')[0];
+    const parts = getMexicoDateParts();
+    const fechaHoyStr = getMexicoDateKey();
+    const offset = normalizeOffset(parts.timeZoneName);
 
-    const inicioDia = `${fechaHoyStr}T00:00:00.000Z`;
-    const finDia = `${fechaHoyStr}T23:59:59.999Z`;
+    const inicioDia = `${fechaHoyStr}T00:00:00.000${offset}`;
+    const finDia = `${fechaHoyStr}T23:59:59.999${offset}`;
 
     const { count, error } = await supabase
       .from('quizzes')
@@ -372,7 +418,7 @@ class UIManager {
       title: this.currentPrize.title,
       label: this.currentPrize.label,
       lugar: this.currentPrize.lugar,
-      folio: 'MUCH-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+      folio: buildPrizeFolio(this.currentPrize.label),
       date: new Intl.DateTimeFormat('es-MX', { dateStyle: 'long' }).format(new Date()),
       emoji: this.currentPrize.emoji
     };
@@ -417,7 +463,7 @@ class UIManager {
         num_preguntas: QUESTIONS.length
       });
 
-      endQuizInDB({
+      await endQuizInDB({
         puntaje_total: puntajeFinal,
         num_correctas: s.correct,
         num_preguntas: QUESTIONS.length

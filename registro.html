@@ -335,20 +335,32 @@
       return null;
     }
 
+    function buildPrizeFolio(prizeLabel = '') {
+      const text = String(prizeLabel || '').toLowerCase();
+      let prefix = 'MUCH';
+
+      if (text.includes('planetario')) {
+        prefix = 'PLAN';
+      } else if (text.includes('visita general') || text.includes('museo + planetario')) {
+        prefix = 'VGMP';
+      }
+
+      return `${prefix}-` + Math.random().toString(36).substring(2, 8).toUpperCase();
+    }
+
     // ---------- Guardar en Supabase ----------
     async function guardarEnSupabase(nombre, correo, telefono, prizeData) {
       if (!supabaseClient) {
-        console.warn('[REGISTRO] supabaseClient es null');
-        return;
+        throw new Error('No se pudo conectar con la base de datos.');
       }
 
       try {
         // 1. Insertar el GANADOR con datos completos
-        const folioNew = prizeData.folio || ('MUCH-' + Math.random().toString(36).substring(2, 8).toUpperCase());
+        const folioNew = prizeData.folio || buildPrizeFolio(prizeData.label || prizeData.title);
 
         // Calcular vigencia (30 días por defecto)
         const validUntil = new Date();
-        validUntil.setDate(validUntil.getDate() + 30);
+        validUntil.setDate(validUntil.getDate() + 7);
 
         const { data: winnerData, error: winnerError } = await supabaseClient
           .from('Ganadores')
@@ -371,16 +383,17 @@
         const winnerID = winnerData.id;
         console.log('[REGISTRO] Ganador guardado. ID:', winnerID);
 
-        // 2. Insertar o VINCLULAR el RECORD DEL QUIZ
-        // Intentamos usar el ID de la BD creado por app.js
-        let quizDbId = null;
-        try { quizDbId = localStorage.getItem('much_quiz_db_id'); } catch (_) { }
+        try {
+          // 2. Insertar o VINCLULAR el RECORD DEL QUIZ
+          // Intentamos usar el ID de la BD creado por app.js
+          let quizDbId = null;
+          try { quizDbId = localStorage.getItem('much_quiz_db_id'); } catch (_) { }
 
-        const quizRaw = localStorage.getItem('much_quiz_final_data');
-        let qData = {};
-        if (quizRaw) qData = JSON.parse(quizRaw);
+          const quizRaw = localStorage.getItem('much_quiz_final_data');
+          let qData = {};
+          if (quizRaw) qData = JSON.parse(quizRaw);
 
-        if (quizDbId) {
+          if (quizDbId) {
           // A) Si existe ID de quiz, lo ACTUALIZAMOS para vincularlo al participante real
           // Y TAMBIEN aseguramos que el puntaje esté guardado (por si falló app.js)
           console.log('[REGISTRO] Vinculando Quiz existente:', quizDbId);
@@ -406,7 +419,7 @@
           if (quizUpdateError) console.error('Error vinculando quiz:', quizUpdateError);
           else console.log('✅ Quiz vinculado al ganador correctamente.');
 
-        } else if (qData.sala_id) {
+          } else if (qData.sala_id) {
           // B) Fallback: Si no hay ID de BD (se jugó offline o falló app.js), INSERTAMOS uno nuevo
           // Esto garantiza que el ganador siempre tenga su registro de quiz
           console.log('[REGISTRO] Insertando Quiz nuevo (Fallback)');
@@ -427,11 +440,17 @@
 
           if (quizError) console.error('Error guardando Quiz (Fallback):', quizError.message);
           else console.log('✅ Quiz guardado correctamente linked a ganador (Fallback).');
+          }
+        } catch (err) {
+          console.error('Error al vincular el quiz:', err);
         }
 
       } catch (err) {
         console.error('Error general guardarEnSupabase:', err);
+        throw err;
       }
+
+      return true;
     }
 
     // ---------- Submit ----------
@@ -467,7 +486,7 @@
 
       // Plan B si no hay nada en localStorage
       if (!prizeData) {
-        const folio = 'MUCH-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const folio = buildPrizeFolio('Entrada al Museo MUCH');
         prizeData = {
           title: 'MUCH · Premio',
           label: 'Entrada al Museo MUCH',
@@ -481,8 +500,9 @@
       }
 
       // Guardar en BD
+      let registroGuardado = false;
       try {
-        await guardarEnSupabase(
+        registroGuardado = await guardarEnSupabase(
           nombre.trim().replace(/\s+/g, ' '),
           correo.trim().toLowerCase(),
           telefono.trim(),
@@ -490,6 +510,13 @@
         );
       } catch (err) {
         console.error('Error guardando en Supabase:', err);
+      }
+
+      if (!registroGuardado) {
+        submitting = false;
+        $('submitBtn').removeAttribute('disabled');
+        alert('No se pudo registrar el boleto. Intenta nuevamente.');
+        return;
       }
 
       // Parámetros para boleto.html
